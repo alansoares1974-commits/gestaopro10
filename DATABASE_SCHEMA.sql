@@ -463,19 +463,7 @@ SELECT
 FROM cash_movements;
 
 
--- ============================================
--- TRIGGERS (Opcional - para atualização automática)
--- ============================================
 
--- Exemplo de trigger para atualizar updated_at
-DELIMITER //
-CREATE TRIGGER update_products_timestamp
-BEFORE UPDATE ON products
-FOR EACH ROW
-BEGIN
-    SET NEW.updated_at = CURRENT_TIMESTAMP;
-END//
-DELIMITER ;
 
 -- ============================================
 -- FIM DO SCHEMA
