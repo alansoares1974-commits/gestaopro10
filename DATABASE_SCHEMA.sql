@@ -29,7 +29,7 @@ CREATE TABLE profiles (
     INDEX idx_username (username)
 );
 
-COMMENT ON TABLE profiles IS 'Perfis de usuários do sistema';
+
 
 
 -- ============================================
@@ -46,7 +46,7 @@ CREATE TABLE user_roles (
     INDEX idx_user_roles (user_id, role)
 );
 
-COMMENT ON TABLE user_roles IS 'Roles e permissões dos usuários';
+
 
 
 -- ============================================
@@ -68,7 +68,7 @@ CREATE TABLE customers (
     INDEX idx_customer_email (email)
 );
 
-COMMENT ON TABLE customers IS 'Cadastro de clientes';
+
 
 
 -- ============================================
@@ -96,7 +96,7 @@ CREATE TABLE products (
     INDEX idx_product_active (active)
 );
 
-COMMENT ON TABLE products IS 'Catálogo de produtos';
+
 
 
 -- ============================================
@@ -120,7 +120,7 @@ CREATE TABLE sales (
     INDEX idx_sales_payment (payment_method)
 );
 
-COMMENT ON TABLE sales IS 'Registro de vendas realizadas';
+
 
 
 -- ============================================
@@ -145,7 +145,7 @@ CREATE TABLE cash_movements (
     INDEX idx_cash_category (category)
 );
 
-COMMENT ON TABLE cash_movements IS 'Movimentações de caixa (entradas e saídas)';
+
 
 
 -- ============================================
@@ -171,7 +171,7 @@ CREATE TABLE marketplace_orders (
     INDEX idx_order_date (created_at)
 );
 
-COMMENT ON TABLE marketplace_orders IS 'Pedidos recebidos de marketplaces';
+
 
 
 -- ============================================
@@ -194,7 +194,7 @@ CREATE TABLE expenses (
     INDEX idx_expense_created (created_at)
 );
 
-COMMENT ON TABLE expenses IS 'Registro de despesas';
+
 
 
 -- ============================================
@@ -217,7 +217,7 @@ CREATE TABLE suppliers (
     INDEX idx_supplier_active (active)
 );
 
-COMMENT ON TABLE suppliers IS 'Cadastro de fornecedores';
+
 
 
 -- ============================================
@@ -243,7 +243,7 @@ CREATE TABLE employees (
     INDEX idx_employee_document (document)
 );
 
-COMMENT ON TABLE employees IS 'Cadastro de funcionários';
+
 
 
 -- ============================================
@@ -261,7 +261,7 @@ CREATE TABLE employee_documents (
     INDEX idx_doc_employee (employee_id)
 );
 
-COMMENT ON TABLE employee_documents IS 'Documentos anexados aos funcionários';
+
 
 
 -- ============================================
@@ -286,7 +286,7 @@ CREATE TABLE materials (
     INDEX idx_material_active (active)
 );
 
-COMMENT ON TABLE materials IS 'Estoque de materiais/insumos';
+
 
 
 -- ============================================
@@ -306,7 +306,7 @@ CREATE TABLE services (
     INDEX idx_service_active (active)
 );
 
-COMMENT ON TABLE services IS 'Catálogo de serviços oferecidos';
+
 
 
 -- ============================================
@@ -332,7 +332,7 @@ CREATE TABLE contracts (
     INDEX idx_contract_dates (start_date, end_date)
 );
 
-COMMENT ON TABLE contracts IS 'Contratos de serviços com clientes';
+
 
 
 -- ============================================
@@ -360,7 +360,7 @@ CREATE TABLE invoices (
     INDEX idx_invoice_dates (issue_date, due_date)
 );
 
-COMMENT ON TABLE invoices IS 'Notas fiscais emitidas';
+
 
 
 -- ============================================
@@ -386,7 +386,7 @@ CREATE TABLE assets (
     INDEX idx_asset_status (status)
 );
 
-COMMENT ON TABLE assets IS 'Patrimônio e ativos da empresa';
+
 
 
 -- ============================================
@@ -412,7 +412,7 @@ CREATE TABLE production_orders (
     INDEX idx_production_dates (start_date, end_date)
 );
 
-COMMENT ON TABLE production_orders IS 'Ordens de produção';
+
 
 
 -- ============================================
