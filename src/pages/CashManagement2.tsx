@@ -32,8 +32,7 @@ export default function CashManagement2() {
   const { data: movements = [] } = useQuery({
     queryKey: ['cash_movements_supabase'],
     queryFn: async () => {
-      // @ts-expect-error - tabela existe mas types.ts ainda não foi atualizado
-      const { data, error } = await supabase
+      const { data, error } = await (supabase as any)
         .from('cash_movements')
         .select('*')
         .order('created_at', { ascending: false });
@@ -48,16 +47,14 @@ export default function CashManagement2() {
       const { data: userData } = await supabase.auth.getUser();
       
       if (isEditing && editingId) {
-        // @ts-ignore - tabela existe mas types.ts ainda não foi atualizado
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('cash_movements')
           .update(data)
           .eq('id', editingId);
         
         if (error) throw error;
       } else {
-        // @ts-ignore - tabela existe mas types.ts ainda não foi atualizado
-        const { error } = await supabase
+        const { error } = await (supabase as any)
           .from('cash_movements')
           .insert([{
             ...data,
@@ -81,8 +78,7 @@ export default function CashManagement2() {
 
   const deleteMovement = useMutation({
     mutationFn: async (ids: string[]) => {
-      // @ts-ignore - tabela existe mas types.ts ainda não foi atualizado
-      const { error } = await supabase
+      const { error } = await (supabase as any)
         .from('cash_movements')
         .delete()
         .in('id', ids);
