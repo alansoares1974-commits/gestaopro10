@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -8,20 +8,22 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Wallet, TrendingUp, TrendingDown, Filter, Upload, Copy, Trash2, Edit } from "lucide-react";
+import { Wallet, TrendingUp, TrendingDown, Filter, Trash2, Edit, Copy } from "lucide-react";
 import { toast } from "sonner";
-import { externalServer } from "@/api/externalServer";
+import { supabase } from "@/integrations/supabase/client";
+import { format } from "date-fns";
 
 interface CashMovement {
   id: string;
-  type: 'entrada' | 'saida';
-  value: number;
-  category: string;
-  reason: string;
-  description?: string;
-  proof?: string;
-  date: string;
-  created_date: string;
+  type: string;
+  amount: number;
+  category: string | null;
+  description: string | null;
+  payment_method: string | null;
+  proof_url: string | null;
+  created_at: string;
+  user_id: string;
+  created_by: string | null;
 }
 
 export default function CashManagement() {
@@ -32,126 +34,98 @@ export default function CashManagement() {
   const [movementType, setMovementType] = useState<'entrada' | 'saida'>('entrada');
   const [selectedItems, setSelectedItems] = useState<string[]>([]);
   const [formData, setFormData] = useState({
-    value: 0,
+    amount: 0,
     category: 'Outros',
-    reason: '',
     description: '',
-    proof: '',
-    date: new Date().toISOString().split('T')[0],
+    payment_method: 'dinheiro',
+    proof_url: '',
   });
 
-  // Inicializar armazenamento local se necessário
-  useEffect(() => {
-    if (!localStorage.getItem('cash_movements')) {
-      localStorage.setItem('cash_movements', '[]');
-    }
-  }, []);
-
-  // Buscar movimentos do localStorage
   const { data: movements = [] } = useQuery({
     queryKey: ['cash_movements'],
-    queryFn: () => {
-      try {
-        const stored = localStorage.getItem('cash_movements');
-        const data = stored ? JSON.parse(stored) : [];
-        return data.sort((a: CashMovement, b: CashMovement) => 
-          new Date(b.created_date).getTime() - new Date(a.created_date).getTime()
-        );
-      } catch (e) {
-        console.error('Erro ao carregar movimentos:', e);
-        return [];
-      }
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cash_movements')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data || [];
     },
   });
 
   const createMovement = useMutation({
-    mutationFn: async (data: Omit<CashMovement, 'id' | 'created_date'>) => {
-      const stored = localStorage.getItem('cash_movements');
-      const existingMovements = stored ? JSON.parse(stored) : [];
+    mutationFn: async (data: { type: string; amount: number; category: string; description: string; payment_method: string; proof_url: string }) => {
+      const { data: userData } = await supabase.auth.getUser();
       
       if (isEditing && editingId) {
-        const updated = existingMovements.map((m: CashMovement) => 
-          m.id === editingId ? { ...m, ...data } : m
-        );
-        localStorage.setItem('cash_movements', JSON.stringify(updated));
-        // Tentar atualizar no servidor externo
-        try {
-          await externalServer.updateInExternalDatabase('cash_movements', editingId, data);
-        } catch (e) {
-          // Fallback já tratado no cliente
-        }
-        return data;
+        const { error } = await supabase
+          .from('cash_movements')
+          .update({
+            type: data.type,
+            amount: data.amount,
+            category: data.category,
+            description: data.description,
+            payment_method: data.payment_method,
+            proof_url: data.proof_url,
+          })
+          .eq('id', editingId);
+        
+        if (error) throw error;
       } else {
-        const newMovement: CashMovement = {
-          ...data,
-          id: Date.now().toString(),
-          created_date: new Date().toISOString(),
-        };
-        const updated = [...existingMovements, newMovement];
-        localStorage.setItem('cash_movements', JSON.stringify(updated));
-        // Tentar salvar no servidor externo
-        try {
-          await externalServer.saveToExternalDatabase('cash_movements', newMovement);
-        } catch (e) {
-          // Fallback já tratado no cliente
-        }
-        return newMovement;
+        const { error } = await supabase
+          .from('cash_movements')
+          .insert([{
+            type: data.type,
+            amount: data.amount,
+            category: data.category,
+            description: data.description,
+            payment_method: data.payment_method,
+            proof_url: data.proof_url,
+            user_id: userData.user?.id,
+            created_by: userData.user?.email || 'system',
+          }]);
+        
+        if (error) throw error;
       }
     },
     onSuccess: () => {
-      try {
-        const stored = localStorage.getItem('cash_movements');
-        const data = stored ? JSON.parse(stored) : [];
-        const sorted = data.sort((a: CashMovement, b: CashMovement) => new Date(b.created_date).getTime() - new Date(a.created_date).getTime());
-        queryClient.setQueryData(['cash_movements'], sorted);
-      } catch (e) {
-        console.error('Erro ao ler movimentos do caixa:', e);
-      }
       queryClient.invalidateQueries({ queryKey: ['cash_movements'] });
       toast.success(isEditing ? "Movimentação atualizada!" : "Movimentação registrada!");
       setShowForm(false);
       resetForm();
     },
+    onError: (error: any) => {
+      toast.error(error?.message || "Erro ao salvar movimentação");
+    },
   });
 
   const deleteMovement = useMutation({
     mutationFn: async (ids: string[]) => {
-      const stored = localStorage.getItem('cash_movements');
-      const existingMovements = stored ? JSON.parse(stored) : [];
-      const updated = existingMovements.filter((m: CashMovement) => !ids.includes(m.id));
-      localStorage.setItem('cash_movements', JSON.stringify(updated));
-      // Tentar deletar no servidor externo
-      for (const id of ids) {
-        try {
-          await externalServer.deleteFromExternalDatabase('cash_movements', id);
-        } catch (e) {
-          // Fallback já tratado no cliente
-        }
-      }
+      const { error } = await supabase
+        .from('cash_movements')
+        .delete()
+        .in('id', ids);
+      
+      if (error) throw error;
     },
     onSuccess: () => {
-      try {
-        const stored = localStorage.getItem('cash_movements');
-        const data = stored ? JSON.parse(stored) : [];
-        const sorted = data.sort((a: CashMovement, b: CashMovement) => new Date(b.created_date).getTime() - new Date(a.created_date).getTime());
-        queryClient.setQueryData(['cash_movements'], sorted);
-      } catch (e) {
-        console.error('Erro ao atualizar lista após exclusão:', e);
-      }
       queryClient.invalidateQueries({ queryKey: ['cash_movements'] });
       setSelectedItems([]);
       toast.success("Movimentações excluídas!");
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Erro ao excluir");
     },
   });
 
   const resetForm = () => {
     setFormData({
-      value: 0,
+      amount: 0,
       category: 'Outros',
-      reason: '',
       description: '',
-      proof: '',
-      date: new Date().toISOString().split('T')[0],
+      payment_method: 'dinheiro',
+      proof_url: '',
     });
     setMovementType('entrada');
     setIsEditing(false);
@@ -160,14 +134,13 @@ export default function CashManagement() {
 
   const handleEdit = (movement: CashMovement) => {
     setFormData({
-      value: movement.value,
-      category: movement.category,
-      reason: movement.reason,
+      amount: movement.amount,
+      category: movement.category || 'Outros',
       description: movement.description || '',
-      proof: movement.proof || '',
-      date: movement.date,
+      payment_method: movement.payment_method || 'dinheiro',
+      proof_url: movement.proof_url || '',
     });
-    setMovementType(movement.type);
+    setMovementType(movement.type as 'entrada' | 'saida');
     setIsEditing(true);
     setEditingId(movement.id);
     setShowForm(true);
@@ -176,12 +149,11 @@ export default function CashManagement() {
   const handleClone = (movement: CashMovement) => {
     createMovement.mutate({
       type: movement.type,
-      value: movement.value,
-      category: movement.category,
-      reason: movement.reason + " (Cópia)",
-      description: movement.description,
-      proof: movement.proof,
-      date: new Date().toISOString().split('T')[0],
+      amount: movement.amount,
+      category: movement.category || 'Outros',
+      description: (movement.description || '') + " (Cópia)",
+      payment_method: movement.payment_method || 'dinheiro',
+      proof_url: movement.proof_url || '',
     });
   };
 
@@ -219,14 +191,13 @@ export default function CashManagement() {
     });
   };
 
-  // Calcular totais
   const totalEntradas = movements
     .filter((m: CashMovement) => m.type === 'entrada')
-    .reduce((sum: number, m: CashMovement) => sum + m.value, 0);
+    .reduce((sum: number, m: CashMovement) => sum + Number(m.amount), 0);
   
   const totalSaidas = movements
     .filter((m: CashMovement) => m.type === 'saida')
-    .reduce((sum: number, m: CashMovement) => sum + m.value, 0);
+    .reduce((sum: number, m: CashMovement) => sum + Number(m.amount), 0);
   
   const saldoEmCaixa = totalEntradas - totalSaidas;
 
@@ -245,10 +216,9 @@ export default function CashManagement() {
             <Wallet className="w-8 h-8 text-blue-600" />
             <h1 className="text-3xl font-bold text-slate-900">Gestão de Caixa</h1>
           </div>
-          <p className="text-slate-600">Controle completo de entradas e saídas</p>
+          <p className="text-slate-600">Controle completo de entradas e saídas - Dados salvos permanentemente</p>
         </div>
 
-        {/* Cards de Resumo */}
         <div className="grid md:grid-cols-3 gap-6 mb-8">
           <Card className="bg-gradient-to-br from-green-500 to-green-600 text-white shadow-lg">
             <CardContent className="p-6">
@@ -293,30 +263,14 @@ export default function CashManagement() {
           </Card>
         </div>
 
-        {/* Filtros e Botões de Ação */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
           <div className="flex items-center gap-2">
             <Filter className="w-5 h-5 text-slate-600" />
             <span className="text-sm text-slate-600">Filtros</span>
-            <Select defaultValue="Todos">
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="Todos">Todos</SelectItem>
-                <SelectItem value="entrada">Entradas</SelectItem>
-                <SelectItem value="saida">Saídas</SelectItem>
-              </SelectContent>
-            </Select>
-            <Input type="date" className="w-48" defaultValue={new Date().toISOString().split('T')[0]} />
           </div>
           <div className="flex gap-2">
             {selectedItems.length > 0 && (
-              <Button
-                onClick={handleDeleteSelected}
-                variant="destructive"
-                size="sm"
-              >
+              <Button onClick={handleDeleteSelected} variant="destructive" size="sm">
                 <Trash2 className="w-4 h-4 mr-2" />
                 Excluir ({selectedItems.length})
               </Button>
@@ -330,7 +284,6 @@ export default function CashManagement() {
           </div>
         </div>
 
-        {/* Formulário de Nova/Editar Movimentação */}
         {showForm && (
           <Card className="mb-6 shadow-lg">
             <CardContent className="p-6">
@@ -338,7 +291,6 @@ export default function CashManagement() {
                 {isEditing ? 'Editar Movimentação' : 'Registrar Movimentação'}
               </h3>
               <form onSubmit={handleSubmit} className="space-y-4">
-                {/* Tipo: Entrada ou Saída */}
                 <div className="flex gap-4">
                   <Button
                     type="button"
@@ -370,8 +322,8 @@ export default function CashManagement() {
                     <Input
                       type="number"
                       step="0.01"
-                      value={formData.value}
-                      onChange={(e) => setFormData({ ...formData, value: parseFloat(e.target.value) || 0 })}
+                      value={formData.amount}
+                      onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) || 0 })}
                       placeholder="0,00"
                       required
                     />
@@ -395,52 +347,31 @@ export default function CashManagement() {
                 </div>
 
                 <div>
-                  <Label>Motivo *</Label>
-                  <Input
-                    value={formData.reason}
-                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    placeholder="Ex: Venda de produto, Pagamento de aluguel..."
-                    required
-                  />
-                </div>
-
-                <div>
-                  <Label>Descrição (Opcional)</Label>
+                  <Label>Descrição</Label>
                   <Textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    placeholder="Detalhes adicionais..."
+                    placeholder="Detalhes da movimentação..."
                     rows={2}
                   />
                 </div>
 
                 <div>
-                  <Label>Comprovante (Opcional)</Label>
-                  <div className="flex gap-2">
-                    <Input
-                      type="file"
-                      className="flex-1"
-                      accept="image/*,.pdf"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        try {
-                          const { saveFileLocally } = await import('@/utils/localFileStorage');
-                          const storedFile = await saveFileLocally(file);
-                          setFormData({ ...formData, proof: storedFile.data });
-                          toast.success('Comprovante salvo localmente!');
-                        } catch (error: any) {
-                          toast.error(error.message || 'Erro ao salvar comprovante');
-                        }
-                      }}
-                    />
-                    <Button type="button" variant="outline" size="icon">
-                      <Upload className="w-4 h-4" />
-                    </Button>
-                  </div>
-                  {formData.proof && (
-                    <p className="text-xs text-green-600 mt-1">✓ Comprovante anexado</p>
-                  )}
+                  <Label>Método de Pagamento</Label>
+                  <Select
+                    value={formData.payment_method}
+                    onValueChange={(v) => setFormData({ ...formData, payment_method: v })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-white">
+                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                      <SelectItem value="cartao">Cartão</SelectItem>
+                      <SelectItem value="pix">PIX</SelectItem>
+                      <SelectItem value="transferencia">Transferência</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div className="flex gap-3 justify-end pt-4">
@@ -462,92 +393,68 @@ export default function CashManagement() {
           </Card>
         )}
 
-        {/* Histórico de Movimentações */}
         <Card className="shadow-lg">
           <CardContent className="p-6">
-            <h3 className="text-xl font-bold mb-4">Histórico de Movimentações ({movements.length})</h3>
-            {movements.length === 0 ? (
-              <div className="text-center py-12 text-slate-400">
-                <Wallet className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                <p>Nenhuma movimentação encontrado</p>
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-slate-50">
-                      <TableHead className="w-12">
-                        <Checkbox
-                          checked={selectedItems.length === movements.length}
-                          onCheckedChange={(checked) => handleSelectAll(!!checked)}
-                          aria-label="Selecionar todos"
-                        />
-                      </TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Motivo</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead className="text-right">Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {movements.map((m: CashMovement) => (
-                      <TableRow key={m.id}>
-                        <TableCell>
-                          <Checkbox
-                            checked={selectedItems.includes(m.id)}
-                            onCheckedChange={(checked) => handleSelectItem(m.id, !!checked)}
-                            aria-label="Selecionar"
-                          />
-                        </TableCell>
-                        <TableCell>{new Date(m.date).toLocaleDateString()}</TableCell>
-                        <TableCell>
-                          <span className={m.type === 'entrada' ? 'text-blue-600 font-semibold' : 'text-red-600 font-semibold'}>
-                            {m.type === 'entrada' ? 'Entrada' : 'Saída'}
-                          </span>
-                        </TableCell>
-                        <TableCell>{m.category}</TableCell>
-                        <TableCell className="max-w-[240px] truncate" title={m.reason}>{m.reason}</TableCell>
-                        <TableCell className="max-w-[300px] truncate" title={m.description}>{m.description}</TableCell>
-                        <TableCell className={m.type === 'entrada' ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
-                          R$ {m.value.toFixed(2)}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex gap-2 justify-end">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleClone(m)}
-                              title="Clonar"
-                            >
-                              <Copy className="w-4 h-4 text-gray-600" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleEdit(m)}
-                              title="Editar"
-                            >
-                              <Edit className="w-4 h-4 text-blue-600" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => deleteMovement.mutate([m.id])}
-                              title="Excluir"
-                            >
-                              <Trash2 className="w-4 h-4 text-red-600" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox 
+                      checked={selectedItems.length === movements.length && movements.length > 0}
+                      onCheckedChange={handleSelectAll}
+                    />
+                  </TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Categoria</TableHead>
+                  <TableHead>Descrição</TableHead>
+                  <TableHead>Valor</TableHead>
+                  <TableHead>Método</TableHead>
+                  <TableHead>Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {movements.map((movement: CashMovement) => (
+                  <TableRow key={movement.id}>
+                    <TableCell>
+                      <Checkbox 
+                        checked={selectedItems.includes(movement.id)}
+                        onCheckedChange={(checked) => handleSelectItem(movement.id, checked as boolean)}
+                      />
+                    </TableCell>
+                    <TableCell>{format(new Date(movement.created_at), 'dd/MM/yyyy HH:mm')}</TableCell>
+                    <TableCell>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        movement.type === 'entrada' 
+                          ? 'bg-blue-100 text-blue-700' 
+                          : 'bg-red-100 text-red-700'
+                      }`}>
+                        {movement.type === 'entrada' ? 'Entrada' : 'Saída'}
+                      </span>
+                    </TableCell>
+                    <TableCell>{movement.category}</TableCell>
+                    <TableCell>{movement.description || '-'}</TableCell>
+                    <TableCell className={movement.type === 'entrada' ? 'text-green-600 font-bold' : 'text-red-600 font-bold'}>
+                      R$ {Number(movement.amount).toFixed(2)}
+                    </TableCell>
+                    <TableCell>{movement.payment_method || '-'}</TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleClone(movement)} title="Clonar">
+                          <Copy className="w-4 h-4 text-gray-600" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(movement)} title="Editar">
+                          <Edit className="w-4 h-4 text-blue-600" />
+                        </Button>
+                        <Button variant="ghost" size="icon" onClick={() => deleteMovement.mutate([movement.id])} title="Excluir">
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </CardContent>
         </Card>
       </div>
