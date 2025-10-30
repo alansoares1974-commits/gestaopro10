@@ -78,12 +78,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserProfile = async (supabaseUser: SupabaseUser) => {
     try {
-      // Fetch profile
+      // Fetch profile (use maybeSingle to handle missing profiles gracefully)
       const { data: profile } = await supabase
         .from('profiles')
         .select('username')
         .eq('id', supabaseUser.id)
-        .single();
+        .maybeSingle();
 
       // Check if user has admin role
       const { data: userRoles } = await supabase
@@ -102,6 +102,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
     } catch (error) {
       console.error('Error fetching user profile:', error);
+      // Even on error, set basic user data so login can proceed
+      setUser({
+        id: supabaseUser.id,
+        email: supabaseUser.email || '',
+        username: supabaseUser.email?.split('@')[0] || '',
+        role: 'user',
+        permissions: []
+      });
     } finally {
       setLoading(false);
     }
@@ -126,15 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { success: false, error: error.message };
       }
 
-      // Create profile
-      if (data.user) {
-        await supabase.from('profiles').insert({
-          id: data.user.id,
-          username,
-          full_name: username
-        });
-      }
-
+      // Profile is now created automatically by database trigger
       return { success: true };
     } catch (error: any) {
       return { success: false, error: error.message };

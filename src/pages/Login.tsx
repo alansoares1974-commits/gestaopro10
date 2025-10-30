@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -14,8 +14,15 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [username, setUsername] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const { login, signup } = useAuth();
+  const { login, signup, isAuthenticated, loading } = useAuth();
   const navigate = useNavigate();
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated && !loading) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, loading, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,16 +35,18 @@ export default function Login() {
         title: "Login realizado com sucesso!",
         description: "Bem-vindo de volta.",
       });
-      navigate('/dashboard');
+      // Wait a bit for auth state to update, then navigate
+      setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 100);
     } else {
       toast({
         title: "Erro ao fazer login",
         description: result.error || "Credenciais inválidas.",
         variant: "destructive",
       });
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   const handleSignup = async (e: React.FormEvent) => {
@@ -49,20 +58,26 @@ export default function Login() {
     if (result.success) {
       toast({
         title: "Conta criada com sucesso!",
-        description: "Você já pode fazer login.",
+        description: "Fazendo login...",
       });
       // Auto login after signup
-      await login(email, password);
-      navigate('/dashboard');
+      const loginResult = await login(email, password);
+      if (loginResult.success) {
+        // Wait for profile to be created and loaded
+        setTimeout(() => {
+          navigate('/dashboard', { replace: true });
+        }, 500);
+      } else {
+        setIsLoading(false);
+      }
     } else {
       toast({
         title: "Erro ao criar conta",
         description: result.error || "Não foi possível criar a conta.",
         variant: "destructive",
       });
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   return (
