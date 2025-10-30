@@ -13,8 +13,10 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import type { CashMovement } from "@/types/database";
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function CashManagement2() {
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
@@ -58,8 +60,8 @@ export default function CashManagement2() {
           .from('cash_movements')
           .insert([{
             ...data,
-            user_id: userData.user?.id,
-            created_by: userData.user?.email || 'system',
+            ...(userData.user?.id ? { user_id: userData.user.id } : {}),
+            created_by: user?.username || userData.user?.email || 'system',
           }]);
         
         if (error) throw error;
