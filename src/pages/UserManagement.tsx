@@ -1,407 +1,86 @@
-import { useState, useEffect } from 'react';
-import { useAuth, Permission } from '@/contexts/AuthContext';
-import { Navigate } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { toast } from '@/hooks/use-toast';
-import { UserPlus, Trash2, Users, Edit, Key } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-
-interface StoredUser {
-  username: string;
-  password: string;
-  role: 'admin' | 'user';
-  permissions: Permission[];
-}
-
-const AVAILABLE_PERMISSIONS: { value: Permission; label: string }[] = [
-  { value: 'dashboard', label: 'Dashboard' },
-  { value: 'products', label: 'Produtos' },
-  { value: 'sales', label: 'Vendas' },
-  { value: 'reports', label: 'Relatórios' },
-  { value: 'customers', label: 'Clientes' },
-  { value: 'materials', label: 'Materiais' },
-  { value: 'services', label: 'Serviços' },
-  { value: 'expenses', label: 'Despesas' },
-  { value: 'production', label: 'Produção' },
-  { value: 'marketplace-orders', label: 'Pedidos Marketplace' },
-  { value: 'suppliers', label: 'Fornecedores' },
-  { value: 'employees', label: 'Funcionários' },
-  { value: 'invoices', label: 'Faturas' },
-  { value: 'assets', label: 'Ativos' },
-];
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { InfoIcon, Users } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { Navigate } from "react-router-dom";
 
 export default function UserManagement() {
-  const { user, changePassword } = useAuth();
-  const [users, setUsers] = useState<StoredUser[]>([]);
-  const [newUser, setNewUser] = useState<StoredUser>({ username: '', password: '', role: 'user', permissions: [] });
-  const [editingUser, setEditingUser] = useState<StoredUser | null>(null);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isPasswordDialogOpen, setIsPasswordDialogOpen] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-
-  useEffect(() => {
-    loadUsers();
-    // Garantir que o localStorage existe
-    if (!localStorage.getItem('app_users')) {
-      localStorage.setItem('app_users', '[]');
-    }
-  }, []);
-
-  const loadUsers = () => {
-    try {
-      const storedUsers = JSON.parse(localStorage.getItem('app_users') || '[]');
-      setUsers(storedUsers);
-    } catch (e) {
-      console.error('Erro ao carregar usuários:', e);
-      localStorage.setItem('app_users', '[]');
-      setUsers([]);
-    }
-  };
-
-  const handleAddUser = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (users.some(u => u.username === newUser.username)) {
-      toast({
-        title: "Erro",
-        description: "Usuário já existe.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const updatedUsers = [...users, newUser];
-    localStorage.setItem('app_users', JSON.stringify(updatedUsers));
-    setUsers(updatedUsers);
-    setNewUser({ username: '', password: '', role: 'user', permissions: [] });
-    
-    toast({
-      title: "Usuário criado!",
-      description: `Usuário ${newUser.username} foi criado com sucesso.`,
-    });
-  };
-
-  const handleEditUser = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingUser) return;
-
-    const updatedUsers = users.map(u => 
-      u.username === editingUser.username ? editingUser : u
-    );
-    localStorage.setItem('app_users', JSON.stringify(updatedUsers));
-    setUsers(updatedUsers);
-    setIsEditDialogOpen(false);
-    setEditingUser(null);
-    
-    toast({
-      title: "Usuário atualizado!",
-      description: `Permissões de ${editingUser.username} foram atualizadas.`,
-    });
-  };
-
-  const togglePermission = (permission: Permission, isNew: boolean = false) => {
-    const target = isNew ? newUser : editingUser;
-    if (!target) return;
-
-    const currentPermissions = target.permissions || [];
-    const hasPermission = currentPermissions.includes(permission);
-    
-    const updatedPermissions = hasPermission
-      ? currentPermissions.filter(p => p !== permission)
-      : [...currentPermissions, permission];
-
-    if (isNew) {
-      setNewUser({ ...newUser, permissions: updatedPermissions });
-    } else {
-      setEditingUser({ ...editingUser!, permissions: updatedPermissions });
-    }
-  };
-
-  const handleChangePassword = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (newPassword !== confirmPassword) {
-      toast({
-        title: "Erro",
-        description: "As senhas não coincidem.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (newPassword.length < 4) {
-      toast({
-        title: "Erro",
-        description: "A senha deve ter pelo menos 4 caracteres.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (changePassword('admin', newPassword)) {
-      toast({
-        title: "Senha alterada!",
-        description: "Sua senha foi alterada com sucesso.",
-      });
-      setIsPasswordDialogOpen(false);
-      setNewPassword('');
-      setConfirmPassword('');
-    } else {
-      toast({
-        title: "Erro",
-        description: "Não foi possível alterar a senha.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleDeleteUser = (username: string) => {
-    if (username === 'admin') {
-      toast({
-        title: "Erro",
-        description: "Não é possível excluir o usuário admin.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const updatedUsers = users.filter(u => u.username !== username);
-    localStorage.setItem('app_users', JSON.stringify(updatedUsers));
-    setUsers(updatedUsers);
-    
-    toast({
-      title: "Usuário removido",
-      description: `Usuário ${username} foi removido.`,
-    });
-  };
+  const { user } = useAuth();
 
   if (user?.role !== 'admin') {
     return <Navigate to="/dashboard" replace />;
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+    <div className="p-4 md:p-8 bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+      <div className="max-w-4xl mx-auto">
+        <div className="mb-8 flex items-center gap-3">
           <Users className="w-8 h-8 text-primary" />
-          <h1 className="text-3xl font-bold">Gerenciamento de Usuários</h1>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-900 mb-2">Gerenciamento de Usuários</h1>
+            <p className="text-slate-600">Sistema de autenticação e controle de acesso</p>
+          </div>
         </div>
-        <Dialog open={isPasswordDialogOpen} onOpenChange={setIsPasswordDialogOpen}>
-          <DialogTrigger asChild>
-            <Button variant="outline">
-              <Key className="w-4 h-4 mr-2" />
-              Alterar Minha Senha
-            </Button>
-          </DialogTrigger>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Alterar Senha do Admin</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="newPassword">Nova Senha</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  placeholder="Digite a nova senha"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword">Confirmar Senha</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="Confirme a nova senha"
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full">
-                Alterar Senha
-              </Button>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserPlus className="w-5 h-5" />
-            Adicionar Novo Usuário
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleAddUser} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="username">Nome de Usuário</Label>
-                <Input
-                  id="username"
-                  value={newUser.username}
-                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Senha</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">Tipo</Label>
-                <select
-                  id="role"
-                  className="w-full h-10 px-3 rounded-md border border-input bg-background"
-                  value={newUser.role}
-                  onChange={(e) => {
-                    const role = e.target.value as 'admin' | 'user';
-                    setNewUser({ ...newUser, role });
-                  }}
-                >
-                  <option value="user">Usuário</option>
-                  <option value="admin">Administrador</option>
-                </select>
+        <Alert className="mb-6">
+          <InfoIcon className="h-4 w-4" />
+          <AlertDescription>
+            <div className="space-y-4">
+              <p className="font-semibold">Sistema de Autenticação Atualizado</p>
+              <p>
+                O sistema agora usa autenticação segura via Lovable Cloud. Os usuários são gerenciados 
+                diretamente pelo sistema de autenticação e suas funções são armazenadas no banco de dados.
+              </p>
+              <div className="mt-4 space-y-2">
+                <p className="font-medium">Como funciona o novo sistema:</p>
+                <ol className="list-decimal list-inside space-y-1 text-sm">
+                  <li>Novos usuários se cadastram na tela de login usando email e senha</li>
+                  <li>Administradores podem atribuir funções via backend</li>
+                  <li>Todas as senhas são criptografadas automaticamente</li>
+                  <li>As permissões são validadas no servidor, não no cliente</li>
+                </ol>
               </div>
             </div>
-            
-            {newUser.role === 'user' && (
-              <div className="space-y-2">
-                <Label>Permissões de Acesso</Label>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 border rounded-lg">
-                  {AVAILABLE_PERMISSIONS.map((perm) => (
-                    <div key={perm.value} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`new-${perm.value}`}
-                        checked={newUser.permissions?.includes(perm.value)}
-                        onCheckedChange={() => togglePermission(perm.value, true)}
-                      />
-                      <label
-                        htmlFor={`new-${perm.value}`}
-                        className="text-sm font-medium leading-none cursor-pointer"
-                      >
-                        {perm.label}
-                      </label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+          </AlertDescription>
+        </Alert>
 
-            <Button type="submit">
-              <UserPlus className="w-4 h-4 mr-2" />
-              Adicionar Usuário
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Benefícios de Segurança</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div>
+              <h3 className="font-semibold mb-2">O novo sistema oferece:</h3>
+              <ul className="list-disc list-inside space-y-1 text-sm text-slate-600">
+                <li>🔒 Senhas criptografadas e nunca armazenadas em texto plano</li>
+                <li>🎫 Sessões seguras com tokens JWT</li>
+                <li>🛡️ Validação server-side de permissões (não pode ser burlada)</li>
+                <li>🚫 Proteção contra ataques de escalação de privilégios</li>
+                <li>✅ Conformidade com LGPD e boas práticas de segurança</li>
+                <li>🔑 Recuperação de senha por email</li>
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Usuários Cadastrados</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            {users.map((u) => (
-              <div
-                key={u.username}
-                className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent/50 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Users className="w-5 h-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-semibold">{u.username}</p>
-                    <div className="flex gap-2 mt-1">
-                      <Badge variant={u.role === 'admin' ? 'default' : 'secondary'}>
-                        {u.role === 'admin' ? 'Administrador' : 'Usuário'}
-                      </Badge>
-                      {u.role === 'user' && u.permissions && (
-                        <Badge variant="outline">
-                          {u.permissions.length} permissões
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                {u.username !== 'admin' && (
-                  <div className="flex gap-2">
-                    {u.role === 'user' && (
-                      <Dialog open={isEditDialogOpen && editingUser?.username === u.username} onOpenChange={(open) => {
-                        setIsEditDialogOpen(open);
-                        if (!open) setEditingUser(null);
-                      }}>
-                        <DialogTrigger asChild>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setEditingUser({ ...u })}
-                          >
-                            <Edit className="w-4 h-4" />
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
-                          <DialogHeader>
-                            <DialogTitle>Editar Permissões - {u.username}</DialogTitle>
-                          </DialogHeader>
-                          <form onSubmit={handleEditUser} className="space-y-4">
-                            <div className="space-y-2">
-                              <Label>Permissões de Acesso</Label>
-                              <div className="grid grid-cols-2 gap-3 p-4 border rounded-lg max-h-96 overflow-y-auto">
-                                {AVAILABLE_PERMISSIONS.map((perm) => (
-                                  <div key={perm.value} className="flex items-center space-x-2">
-                                    <Checkbox
-                                      id={`edit-${perm.value}`}
-                                      checked={editingUser?.permissions?.includes(perm.value)}
-                                      onCheckedChange={() => togglePermission(perm.value, false)}
-                                    />
-                                    <label
-                                      htmlFor={`edit-${perm.value}`}
-                                      className="text-sm font-medium leading-none cursor-pointer"
-                                    >
-                                      {perm.label}
-                                    </label>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                            <Button type="submit" className="w-full">
-                              Salvar Alterações
-                            </Button>
-                          </form>
-                        </DialogContent>
-                      </Dialog>
-                    )}
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => handleDeleteUser(u.username)}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Gerenciar Funções de Usuários</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm text-slate-600 mb-4">
+              Para atribuir a função de administrador a um usuário, você precisa adicionar um registro 
+              na tabela <code className="bg-slate-100 px-2 py-1 rounded">user_roles</code> no backend.
+            </p>
+            <div className="bg-slate-50 p-4 rounded-lg border">
+              <p className="font-mono text-sm">
+                INSERT INTO user_roles (user_id, role)<br />
+                VALUES ('user-id-aqui', 'admin');
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

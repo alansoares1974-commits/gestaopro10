@@ -1,4 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { User as SupabaseUser, Session } from '@supabase/supabase-js';
 
 export type Permission = 
   | 'dashboard' 
@@ -17,6 +19,8 @@ export type Permission =
   | 'assets';
 
 interface User {
+  id: string;
+  email: string;
   username: string;
   role: 'admin' | 'user';
   permissions?: Permission[];
@@ -24,79 +28,140 @@ interface User {
 
 interface AuthContextType {
   user: User | null;
-  login: (username: string, password: string) => boolean;
-  logout: () => void;
+  session: Session | null;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  signup: (email: string, password: string, username: string) => Promise<{ success: boolean; error?: string }>;
+  logout: () => Promise<void>;
   isAuthenticated: boolean;
+  loading: boolean;
   hasPermission: (permission: Permission) => boolean;
-  changePassword: (username: string, newPassword: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Usuários padrão armazenados no localStorage - PERMANENTES
-const DEFAULT_USERS = [
-  { 
-    username: 'admin', 
-    password: 'suporte@1', 
-    role: 'admin' as const,
-    permissions: [] as Permission[], // Admin tem acesso a tudo
-    permanent: true
-  },
-  { 
-    username: 'salvador', 
-    password: 'salvador@1', // atualizado conforme solicitado
-    role: 'admin' as const,
-    permissions: [] as Permission[], // Admin tem acesso a tudo
-    permanent: true
-  }
-];
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // GARANTIR usuários padrão permanentes sempre existam
-    const storedUsers = localStorage.getItem('app_users');
-    let users = storedUsers ? JSON.parse(storedUsers) : [];
-    
-    // Adicionar ou atualizar usuários permanentes
-    DEFAULT_USERS.forEach(defaultUser => {
-      const existingIndex = users.findIndex((u: any) => u.username === defaultUser.username);
-      if (existingIndex === -1) {
-        // Adicionar usuário se não existir
-        users.push(defaultUser);
-      } else {
-        // Atualizar usuário permanente (manter senha e role corretos)
-        users[existingIndex] = { ...users[existingIndex], ...defaultUser };
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, currentSession) => {
+        setSession(currentSession);
+        
+        if (currentSession?.user) {
+          // Defer profile fetch to avoid blocking
+          setTimeout(() => {
+            fetchUserProfile(currentSession.user);
+          }, 0);
+        } else {
+          setUser(null);
+          setLoading(false);
+        }
       }
-    });
-    
-    localStorage.setItem('app_users', JSON.stringify(users));
-
-    // Verificar se há usuário logado
-    const storedUser = localStorage.getItem('current_user');
-    if (storedUser) {
-      setUser(JSON.parse(storedUser));
-    }
-  }, []);
-
-  const login = (username: string, password: string): boolean => {
-    const users = JSON.parse(localStorage.getItem('app_users') || '[]');
-    const foundUser = users.find(
-      (u: any) => u.username === username && u.password === password
     );
 
-    if (foundUser) {
-      const userData = { 
-        username: foundUser.username, 
-        role: foundUser.role,
-        permissions: foundUser.permissions || []
-      };
-      setUser(userData);
-      localStorage.setItem('current_user', JSON.stringify(userData));
-      return true;
+    // THEN check for existing session
+    supabase.auth.getSession().then(({ data: { session: currentSession } }) => {
+      setSession(currentSession);
+      
+      if (currentSession?.user) {
+        fetchUserProfile(currentSession.user);
+      } else {
+        setLoading(false);
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchUserProfile = async (supabaseUser: SupabaseUser) => {
+    try {
+      // Fetch profile
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', supabaseUser.id)
+        .single();
+
+      // Check if user has admin role
+      const { data: userRoles } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', supabaseUser.id);
+
+      const isAdmin = userRoles?.some(r => r.role === 'admin');
+
+      setUser({
+        id: supabaseUser.id,
+        email: supabaseUser.email || '',
+        username: profile?.username || supabaseUser.email?.split('@')[0] || '',
+        role: isAdmin ? 'admin' : 'user',
+        permissions: []
+      });
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+    } finally {
+      setLoading(false);
     }
-    return false;
+  };
+
+  const signup = async (email: string, password: string, username: string) => {
+    try {
+      const redirectUrl = `${window.location.origin}/`;
+      
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: redirectUrl,
+          data: {
+            username
+          }
+        }
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      // Create profile
+      if (data.user) {
+        await supabase.from('profiles').insert({
+          id: data.user.id,
+          username,
+          full_name: username
+        });
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  const login = async (email: string, password: string) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
+    }
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setSession(null);
   };
 
   const hasPermission = (permission: Permission): boolean => {
@@ -105,31 +170,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return user.permissions?.includes(permission) || false;
   };
 
-  const changePassword = (username: string, newPassword: string): boolean => {
-    const users = JSON.parse(localStorage.getItem('app_users') || '[]');
-    const userIndex = users.findIndex((u: any) => u.username === username);
-    
-    if (userIndex === -1) return false;
-    
-    users[userIndex].password = newPassword;
-    localStorage.setItem('app_users', JSON.stringify(users));
-    
-    // Se for o usuário atual, atualizar a sessão
-    if (user?.username === username) {
-      const userData = { ...user };
-      localStorage.setItem('current_user', JSON.stringify(userData));
-    }
-    
-    return true;
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('current_user');
-  };
-
   return (
-    <AuthContext.Provider value={{ user, login, logout, isAuthenticated: !!user, hasPermission, changePassword }}>
+    <AuthContext.Provider value={{ 
+      user, 
+      session,
+      login, 
+      signup,
+      logout, 
+      isAuthenticated: !!session && !!user, 
+      loading,
+      hasPermission 
+    }}>
       {children}
     </AuthContext.Provider>
   );
