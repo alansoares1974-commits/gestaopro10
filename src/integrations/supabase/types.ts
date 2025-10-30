@@ -14,16 +14,333 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      cash_movements: {
+        Row: {
+          amount: number
+          category: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          id: string
+          payment_method: string | null
+          proof_url: string | null
+          type: string
+          user_id: string | null
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          payment_method?: string | null
+          proof_url?: string | null
+          type: string
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          payment_method?: string | null
+          proof_url?: string | null
+          type?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      customers: {
+        Row: {
+          address: string | null
+          created_at: string | null
+          document: string | null
+          email: string | null
+          id: string
+          name: string
+          notes: string | null
+          phone: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string | null
+          document?: string | null
+          email?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          address?: string | null
+          created_at?: string | null
+          document?: string | null
+          email?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          phone?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          category: string | null
+          created_at: string | null
+          created_by: string | null
+          date: string
+          description: string
+          id: string
+          notes: string | null
+          payment_method: string | null
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          date?: string
+          description: string
+          id?: string
+          notes?: string | null
+          payment_method?: string | null
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          date?: string
+          description?: string
+          id?: string
+          notes?: string | null
+          payment_method?: string | null
+        }
+        Relationships: []
+      }
+      marketplace_orders: {
+        Row: {
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string | null
+          customer_name: string
+          customer_phone: string | null
+          id: string
+          items: Json
+          notes: string | null
+          order_number: string
+          status: string
+          total_amount: number
+          updated_at: string | null
+        }
+        Insert: {
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string | null
+          customer_name: string
+          customer_phone?: string | null
+          id?: string
+          items?: Json
+          notes?: string | null
+          order_number: string
+          status?: string
+          total_amount?: number
+          updated_at?: string | null
+        }
+        Update: {
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string | null
+          customer_name?: string
+          customer_phone?: string | null
+          id?: string
+          items?: Json
+          notes?: string | null
+          order_number?: string
+          status?: string
+          total_amount?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      product_meta: {
+        Row: {
+          components_text: string | null
+          cost_items: Json
+          created_at: string
+          external_id: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          components_text?: string | null
+          cost_items?: Json
+          created_at?: string
+          external_id: string
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          components_text?: string | null
+          cost_items?: Json
+          created_at?: string
+          external_id?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      products: {
+        Row: {
+          active: boolean | null
+          barcode: string | null
+          category: string | null
+          cost: number | null
+          created_at: string | null
+          description: string | null
+          id: string
+          image_url: string | null
+          image_url_2: string | null
+          name: string
+          price: number
+          stock: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          barcode?: string | null
+          category?: string | null
+          cost?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          image_url_2?: string | null
+          name: string
+          price: number
+          stock?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          barcode?: string | null
+          category?: string | null
+          cost?: number | null
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          image_url?: string | null
+          image_url_2?: string | null
+          name?: string
+          price?: number
+          stock?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          created_at: string | null
+          full_name: string | null
+          id: string
+          updated_at: string | null
+          username: string
+        }
+        Insert: {
+          created_at?: string | null
+          full_name?: string | null
+          id: string
+          updated_at?: string | null
+          username: string
+        }
+        Update: {
+          created_at?: string | null
+          full_name?: string | null
+          id?: string
+          updated_at?: string | null
+          username?: string
+        }
+        Relationships: []
+      }
+      sales: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          customer_id: string | null
+          discount: number | null
+          id: string
+          items: Json
+          notes: string | null
+          payment_method: string | null
+          total_amount: number
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          customer_id?: string | null
+          discount?: number | null
+          id?: string
+          items?: Json
+          notes?: string | null
+          payment_method?: string | null
+          total_amount: number
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          customer_id?: string | null
+          discount?: number | null
+          id?: string
+          items?: Json
+          notes?: string | null
+          payment_method?: string | null
+          total_amount?: number
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          created_at: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +467,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const
