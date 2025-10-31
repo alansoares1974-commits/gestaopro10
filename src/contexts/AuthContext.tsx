@@ -51,7 +51,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(currentSession);
         
         if (currentSession?.user) {
-          // Defer profile fetch to avoid blocking
+          // Set basic user data immediately to avoid redirect
+          setUser({
+            id: currentSession.user.id,
+            email: currentSession.user.email || '',
+            username: currentSession.user.email?.split('@')[0] || '',
+            role: 'user',
+            permissions: []
+          });
+          
+          // Then fetch full profile async
           setTimeout(() => {
             fetchUserProfile(currentSession.user);
           }, 0);
@@ -67,6 +76,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession(currentSession);
       
       if (currentSession?.user) {
+        // Set basic user data immediately
+        setUser({
+          id: currentSession.user.id,
+          email: currentSession.user.email || '',
+          username: currentSession.user.email?.split('@')[0] || '',
+          role: 'user',
+          permissions: []
+        });
+        
         fetchUserProfile(currentSession.user);
       } else {
         setLoading(false);
