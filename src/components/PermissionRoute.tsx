@@ -14,6 +14,10 @@ export default function PermissionRoute({ children, permission }: PermissionRout
   }
 
   if (!hasPermission(permission)) {
+    // Permitir acesso ao Dashboard para qualquer usuário autenticado
+    if (permission === 'dashboard') {
+      return <>{children}</>;
+    }
     return <Navigate to="/dashboard" replace />;
   }
 
