@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { base44 } from "@/api/base44Client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,18 +12,20 @@ import { ptBR } from "date-fns/locale";
 import { useSoundAlert } from "@/contexts/SoundAlertContext";
 import { ManualOrderForm } from "@/components/marketplace/ManualOrderForm";
 import { TestModeControl } from "@/components/marketplace/TestModeControl";
-import { initializeMarketplaceStorage, validateAndNormalizeOrders, updateOrderStatus } from "@/utils/marketplaceSync";
-import { SoundAlertControl } from "@/components/SoundAlertControl";
+import { supabase } from "@/integrations/supabase/client";
 
 interface MarketplaceOrder {
   id: string;
   order_number: string;
   customer_name: string;
+  customer_phone?: string;
   items: { product: string; quantity: number; location?: string }[];
   status: "pendente" | "separando" | "concluido" | "concluído";
-  created_date: string;
-  created_at?: string;
+  created_at: string;
   completed_by?: string;
+  completed_at?: string;
+  total_amount?: number;
+  notes?: string;
 }
 
 export default function MarketplaceOrders() {
@@ -35,26 +36,25 @@ export default function MarketplaceOrders() {
   const [selectedIntegration, setSelectedIntegration] = useState<string>("bling");
   const { playAlert, alertMode } = useSoundAlert();
 
-  // Inicializar e normalizar pedidos ao carregar
-  useEffect(() => {
-    initializeMarketplaceStorage();
-    validateAndNormalizeOrders();
-  }, []);
-
   const { data: orders = [], refetch, dataUpdatedAt } = useQuery({
-    queryKey: ['marketplace-orders'],
+    queryKey: ['marketplace-orders-supabase'],
     queryFn: async () => {
-      const normalized = validateAndNormalizeOrders();
-      return normalized.sort((a, b) => {
-        const dateA = new Date(a.created_date || a.created_at || '').getTime();
-        const dateB = new Date(b.created_date || b.created_at || '').getTime();
-        return dateB - dateA;
-      });
+      const { data, error } = await supabase
+        .from('marketplace_orders')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Converter items de Json para array
+      return (data || []).map(order => ({
+        ...order,
+        items: (order.items as any) || []
+      })) as MarketplaceOrder[];
     },
     refetchInterval: 5000,
   });
 
-  // Tocar alerta quando novo pedido chegar (lógica simples e eficiente)
   useEffect(() => {
     if (!orders || orders.length === 0) return;
     
@@ -64,7 +64,7 @@ export default function MarketplaceOrders() {
     const lastCheckTime = lastCheck ? new Date(lastCheck).getTime() : 0;
     
     const newOrders = pendingOrders.filter(o => {
-      const orderTime = new Date(o.created_date || o.created_at || '').getTime();
+      const orderTime = new Date(o.created_at).getTime();
       return orderTime > lastCheckTime;
     });
     
@@ -78,14 +78,20 @@ export default function MarketplaceOrders() {
 
   const completeOrderMutation = useMutation({
     mutationFn: async ({ orderId, employeeName }: { orderId: string; employeeName: string }) => {
-      const success = updateOrderStatus(orderId, 'concluido', employeeName);
-      if (!success) {
-        throw new Error('Falha ao atualizar pedido');
-      }
+      const { error } = await supabase
+        .from('marketplace_orders')
+        .update({
+          status: 'concluido',
+          completed_by: employeeName,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', orderId);
+      
+      if (error) throw error;
       return { orderId, employeeName };
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['marketplace-orders'] });
+      queryClient.invalidateQueries({ queryKey: ['marketplace-orders-supabase'] });
       toast.success("Pedido marcado como concluído!");
     },
   });
@@ -102,7 +108,7 @@ export default function MarketplaceOrders() {
   const pendingOrders = orders.filter(o => o.status !== "concluido" && o.status !== "concluído");
   const completedOrders = orders.filter(o => o.status === "concluido" || o.status === "concluído");
   
-  const handleImportOrders = () => {
+  const handleImportOrders = async () => {
     const mode = localStorage.getItem('marketplace_mode') || 'teste';
     const integrationNames = {
       bling: "Bling",
@@ -124,7 +130,6 @@ export default function MarketplaceOrders() {
     // Modo teste: gerar pedidos fake
     toast.info(`Importando pedidos de teste de ${integrationName}...`);
     
-    const orders = JSON.parse(localStorage.getItem('marketplace_orders') || '[]');
     const now = new Date().toISOString();
     const integrationPrefixes: Record<string, string> = {
       bling: 'BLG',
@@ -138,47 +143,46 @@ export default function MarketplaceOrders() {
     
     const fakeOrders = [
       {
-        id: `${Date.now()}-1`,
         order_number: `${integrationPrefixes[selectedIntegration]}-${Math.floor(Math.random() * 10000)}`,
         customer_name: "Cliente Teste A",
         items: [{ product: "Fliperama Metal", quantity: 1, location: "A-1" }],
-        status: 'pendente' as const,
-        created_date: now,
-        created_at: now,
-        source: selectedIntegration
+        status: 'pendente',
+        total_amount: 100,
+        notes: `Pedido de teste - ${integrationName}`
       },
       {
-        id: `${Date.now()}-2`,
         order_number: `${integrationPrefixes[selectedIntegration]}-${Math.floor(Math.random() * 10000)}`,
         customer_name: "Cliente Teste B",
         items: [
           { product: "Controle Metal", quantity: 2, location: "B-2" },
           { product: "Protetor", quantity: 5, location: "C-1" }
         ],
-        status: 'pendente' as const,
-        created_date: now,
-        created_at: now,
-        source: selectedIntegration
+        status: 'pendente',
+        total_amount: 250,
+        notes: `Pedido de teste - ${integrationName}`
       },
       {
-        id: `${Date.now()}-3`,
         order_number: `${integrationPrefixes[selectedIntegration]}-${Math.floor(Math.random() * 10000)}`,
         customer_name: "Cliente Teste C",
         items: [{ product: "Comando Fliperama", quantity: 10, location: "D-3" }],
-        status: 'pendente' as const,
-        created_date: now,
-        created_at: now,
-        source: selectedIntegration
+        status: 'pendente',
+        total_amount: 500,
+        notes: `Pedido de teste - ${integrationName}`
       }
     ];
     
-    const allOrders = [...orders, ...fakeOrders];
-    localStorage.setItem('marketplace_orders', JSON.stringify(allOrders));
+    // Inserir no Supabase
+    const { error } = await supabase
+      .from('marketplace_orders')
+      .insert(fakeOrders);
     
-    setTimeout(() => {
-      toast.success(`3 pedidos de teste importados de ${integrationName}!`);
-      refetch();
-    }, 1500);
+    if (error) {
+      toast.error("Erro ao importar pedidos: " + error.message);
+      return;
+    }
+    
+    toast.success(`3 pedidos de teste importados de ${integrationName}!`);
+    refetch();
   };
 
   return (

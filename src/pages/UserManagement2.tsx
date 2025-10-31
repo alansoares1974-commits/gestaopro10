@@ -9,12 +9,12 @@ import { toast } from '@/hooks/use-toast';
 import { UserPlus, Trash2, Users, Edit } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { base44 } from '@/api/base44Client';
+import { supabase } from '@/integrations/supabase/client';
 
 interface User {
   id?: string;
   username: string;
-  password: string;
+  password?: string;
   role: 'admin' | 'user';
   email?: string;
   full_name?: string;
@@ -27,17 +27,71 @@ export default function UserManagement2() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
   const { data: users = [] } = useQuery({
-    queryKey: ['users_base44'],
+    queryKey: ['users_supabase'],
     queryFn: async () => {
-      const data = await base44.entities.Employee.list('created_date');
-      return data;
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      // Buscar roles de cada usuário
+      const usersWithRoles = await Promise.all(
+        (data || []).map(async (profile) => {
+          const { data: roleData } = await supabase
+            .from('user_roles')
+            .select('role')
+            .eq('user_id', profile.id)
+            .single();
+          
+          return {
+            id: profile.id,
+            username: profile.username,
+            full_name: profile.full_name,
+            email: '', // profiles não tem email
+            role: roleData?.role || 'user'
+          };
+        })
+      );
+      
+      return usersWithRoles;
     },
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: User) => base44.entities.Employee.create(data),
+    mutationFn: async (data: User) => {
+      // Criar usuário no Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: `${data.username}@temp.com`, // email temporário
+        password: data.password || Math.random().toString(36),
+        options: {
+          data: {
+            username: data.username,
+            full_name: data.full_name
+          }
+        }
+      });
+      
+      if (authError) throw authError;
+      if (!authData.user) throw new Error('Falha ao criar usuário');
+      
+      // Atualizar role se for admin
+      if (data.role === 'admin') {
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert([{
+            user_id: authData.user.id,
+            role: 'admin'
+          }]);
+        
+        if (roleError) throw roleError;
+      }
+      
+      return authData;
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users_base44'] });
+      queryClient.invalidateQueries({ queryKey: ['users_supabase'] });
       setNewUser({ username: '', password: '', role: 'user', email: '', full_name: '' });
       toast({
         title: "Usuário criado!",
@@ -54,10 +108,41 @@ export default function UserManagement2() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<User> }) => 
-      base44.entities.Employee.update(id, data),
+    mutationFn: async ({ id, data }: { id: string; data: Partial<User> }) => {
+      // Atualizar profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({
+          username: data.username,
+          full_name: data.full_name
+        })
+        .eq('id', id);
+      
+      if (profileError) throw profileError;
+      
+      // Atualizar role se mudou
+      if (data.role) {
+        // Remover role existente
+        await supabase
+          .from('user_roles')
+          .delete()
+          .eq('user_id', id);
+        
+        // Adicionar nova role se for admin
+        if (data.role === 'admin') {
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .insert([{
+              user_id: id,
+              role: 'admin'
+            }]);
+          
+          if (roleError) throw roleError;
+        }
+      }
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users_base44'] });
+      queryClient.invalidateQueries({ queryKey: ['users_supabase'] });
       setEditingUser(null);
       toast({
         title: "Usuário atualizado!",
@@ -74,9 +159,13 @@ export default function UserManagement2() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => base44.entities.Employee.delete(id),
+    mutationFn: async (id: string) => {
+      // Deletar do Supabase Auth (cascata vai deletar profile e roles)
+      const { error } = await supabase.auth.admin.deleteUser(id);
+      if (error) throw error;
+    },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users_base44'] });
+      queryClient.invalidateQueries({ queryKey: ['users_supabase'] });
       toast({
         title: "Usuário removido",
         description: "Usuário foi removido com sucesso.",
@@ -145,10 +234,10 @@ export default function UserManagement2() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Users className="w-8 h-8 text-primary" />
-          <h1 className="text-3xl font-bold">Gerenciamento de Usuários 2 (Persistente)</h1>
+          <h1 className="text-3xl font-bold">Gerenciamento de Usuários</h1>
         </div>
       </div>
-      <p className="text-sm text-muted-foreground">Dados salvos no banco Base44</p>
+      <p className="text-sm text-muted-foreground">Dados salvos no Lovable Cloud</p>
 
       <Card>
         <CardHeader>
